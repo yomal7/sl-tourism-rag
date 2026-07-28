@@ -1,0 +1,6 @@
+pandas
+chromadb
+sentence-transformers
+pillow
+ollama
+streamlit
