@@ -5,30 +5,18 @@ Phase 6: Context Integration + LLM Generation.
 
 Takes a RetrievalContext (from retrieve.py) — which may contain SQL rows,
 semantic text matches, and/or image matches — formats it all into one
-clear text block, and asks a local Ollama model to write a grounded,
-natural-language answer using ONLY that context.
+clear text block, and asks an LLM to write a grounded, natural-language
+answer using ONLY that context.
 
-Requires Ollama running locally (https://ollama.com):
-    1. Install Ollama, then run:  ollama pull llama3.1
-    2. Make sure the Ollama app/service is running (it runs a local
-       server at http://localhost:11434 automatically once installed)
-    3. python scripts/generate_response.py   (runs a demo query)
-
-You can swap MODEL_NAME for any model you've pulled, e.g. "mistral",
-"llama3.1:8b", "phi3", etc. Smaller models are faster but less fluent —
-worth mentioning your choice and why in the report.
+Which LLM actually gets called (Gemini API or a local Ollama model) is
+controlled by LLM_PROVIDER in .env — see backend/llm_client.py and
+backend/config.py. This file doesn't need to know or care which one is
+active.
 """
 
-from pathlib import Path
-import sys
-
-import ollama
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from retrieve import retrieve, RetrievalContext
-from router import describe_route
-
-MODEL_NAME = "llama3.1"
+from backend.retrieve import retrieve, RetrievalContext
+from backend.router import describe_route
+from backend.llm_client import generate
 
 SYSTEM_PROMPT = """You are a knowledgeable, friendly Sri Lanka travel assistant.
 
@@ -91,8 +79,8 @@ def build_context_block(ctx: RetrievalContext) -> str:
 
 def generate_response(ctx: RetrievalContext) -> str:
     """
-    Sends the retrieved context + user question to the local Ollama model
-    and returns the generated answer text.
+    Sends the retrieved context + user question to whichever LLM provider
+    is configured in .env, and returns the generated answer text.
     """
     context_block = build_context_block(ctx)
 
@@ -103,14 +91,7 @@ Question: {ctx.query_text}
 
 Write a helpful, natural-language answer using only the context above."""
 
-    response = ollama.chat(
-        model=MODEL_NAME,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-    )
-    return response["message"]["content"]
+    return generate(SYSTEM_PROMPT, user_prompt)
 
 
 def answer_query(query_text: str, uploaded_image_path: str | None = None) -> dict:
@@ -137,6 +118,9 @@ def answer_query(query_text: str, uploaded_image_path: str | None = None) -> dic
 
 
 if __name__ == "__main__":
+    # Run from the project root as:  python -m backend.generate_response
+    # (plain `python backend/generate_response.py` won't work now that
+    # this uses package-relative imports — see README.)
     demo_queries = [
         "What is the entrance fee for Sigiriya and when is it open?",
         "Suggest a peaceful place for meditation with some background on it",
