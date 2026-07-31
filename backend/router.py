@@ -40,6 +40,15 @@ SEMANTIC_KEYWORDS = [
     "hidden gem", "off the beaten path", "spiritual", "scenic",
 ]
 
+# Keywords that suggest the user wants to SEE something (image search),
+# even without uploading a photo. CLIP lets us search the image collection
+# using text directly, so these don't require an uploaded image.
+IMAGE_KEYWORDS = [
+    "show me", "what does it look like", "what do they look like",
+    "picture", "photo", "photos", "image", "images", "look like",
+    "visual", "scenery", "view of", "what it looks like",
+]
+
 # Regex to catch "under 1000", "less than 500 rupees", etc.
 FEE_PATTERN = re.compile(r"(under|less than|below|cheaper than)\s+(\d+)", re.IGNORECASE)
 
@@ -123,24 +132,35 @@ def classify_query(query_text: str, image_provided: bool = False) -> RouteDecisi
     # --- Keyword-based classification ---
     structured_hit = any(kw in text_lower for kw in STRUCTURED_KEYWORDS)
     semantic_hit = any(kw in text_lower for kw in SEMANTIC_KEYWORDS)
+    image_hit = any(kw in text_lower for kw in IMAGE_KEYWORDS)
 
     if structured_hit:
         decision.use_sql = True
         decision.reasoning.append("Query contains factual/structured keywords.")
     if semantic_hit:
         decision.use_text_semantic = True
-        decision.reasoning.append("Query contains descriptive/mood keywords -> semantic search.")
+        decision.use_image = True
+        decision.reasoning.append(
+            "Query contains descriptive/mood keywords -> semantic search, "
+            "plus a representative image via CLIP text-to-image."
+        )
+    if image_hit:
+        decision.use_image = True
+        decision.reasoning.append(
+            "Query asks to see/visualize something -> image search via CLIP text-to-image."
+        )
 
-    # --- Fallback: if nothing matched, default to hybrid (SQL + semantic) ---
-    # Most open-ended natural language questions benefit from both structured
-    # facts and descriptive context, so this is a safe default rather than
-    # returning nothing.
+    # --- Fallback: if nothing matched, default to full hybrid (SQL + semantic + image) ---
+    # Most open-ended natural language questions benefit from structured
+    # facts, descriptive context, AND a representative photo, so this is a
+    # safe default rather than returning nothing.
     if not (decision.use_sql or decision.use_text_semantic or decision.use_image):
         decision.use_sql = True
         decision.use_text_semantic = True
+        decision.use_image = True
         decision.reasoning.append(
-            "No specific signal detected -> defaulting to hybrid (SQL + semantic) "
-            "to give the LLM the richest possible context."
+            "No specific signal detected -> defaulting to full hybrid "
+            "(SQL + semantic + image) to give the LLM the richest possible context."
         )
 
     return decision

@@ -17,7 +17,6 @@ Then, in a second terminal, run this:
 """
 
 import os
-from pathlib import Path
 
 import requests
 import streamlit as st
@@ -160,7 +159,10 @@ if submitted:
                     for r in result["image_results"]:
                         st.markdown(f"- **{r['name']}** (distance={r['distance']:.4f})")
 
-            # Show retrieved images, if any, as actual thumbnails.
+            # Show retrieved images, if any, as actual thumbnails, in the
+            # order the backend already sorted them (most visually relevant
+            # first), captioned with the actual destination name rather than
+            # the raw filename.
             # Note: this reads image files directly off disk, which only
             # works because frontend and backend run on the same machine
             # for now. Once they're split into separate Docker containers
@@ -168,11 +170,12 @@ if submitted:
             # static/file endpoint instead of returning raw filesystem paths.
             if result["image_paths_to_display"]:
                 st.subheader("Related images")
-                cols = st.columns(min(len(result["image_paths_to_display"]), 4))
-                for i, path in enumerate(result["image_paths_to_display"]):
+                images_to_show = result["image_paths_to_display"]
+                cols = st.columns(min(len(images_to_show), 4))
+                for i, item in enumerate(images_to_show):
                     try:
-                        img = Image.open(path)
+                        img = Image.open(item["filepath"])
                         with cols[i % len(cols)]:
-                            st.image(img, caption=Path(path).stem, use_container_width=True)
+                            st.image(img, caption=item["name"], use_container_width=True)
                     except Exception:
                         pass  # skip images that fail to load rather than breaking the page

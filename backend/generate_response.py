@@ -26,8 +26,11 @@ Rules you must follow:
   rather than inventing facts.
 - Do not make up entrance fees, hours, or other specifics that aren't in the context.
 - Keep your answer natural and conversational, not just a list of facts.
-- If images are mentioned in the context, refer to them naturally
-  (e.g. "as you can see in the photo of Mirissa Beach").
+- If images are mentioned in the context, refer to them naturally by the
+  destination's name only (e.g. "as you can see in the photo of Mirissa
+  Beach"). NEVER mention filenames, file extensions, or any technical
+  identifiers — the person reading your answer should never see things
+  like "toothtemple_1.jpg".
 """
 
 
@@ -59,9 +62,9 @@ def format_text_results(rows: list[dict]) -> str:
 def format_image_results(rows: list[dict]) -> str:
     if not rows:
         return ""
-    lines = ["Related images found (from image search):"]
+    lines = ["Related images found (from image search), most visually relevant first:"]
     for r in rows:
-        lines.append(f"- {r['name']} — image file: {r['filename'] if 'filename' in r else r.get('filepath', 'unknown')}")
+        lines.append(f"- {r['name']}")
     return "\n".join(lines)
 
 
@@ -104,7 +107,18 @@ def answer_query(query_text: str, uploaded_image_path: str | None = None) -> dic
     ctx = retrieve(query_text, uploaded_image_path=uploaded_image_path)
     answer_text = generate_response(ctx)
 
-    image_paths = list({r.get("filepath") for r in ctx.image_results if r.get("filepath")})
+    # ctx.image_results is already sorted by distance (most similar first) —
+    # ChromaDB returns results in that order. The previous version deduped
+    # with a set(), which silently threw that ordering away. This keeps the
+    # order, dedupes by filepath, and carries the destination name along so
+    # the frontend can use it as a caption instead of the raw filename.
+    seen_paths = set()
+    image_paths = []
+    for r in ctx.image_results:
+        path = r.get("filepath")
+        if path and path not in seen_paths:
+            seen_paths.add(path)
+            image_paths.append({"filepath": path, "name": r.get("name", "")})
 
     return {
         "query": query_text,
