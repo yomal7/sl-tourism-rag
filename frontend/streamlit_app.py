@@ -1,31 +1,32 @@
 """
-app.py
-------
-Phase 7: Web interface for the Sri Lanka Tourism Multimodal RAG system.
+streamlit_app.py
+-----------------
+Phase 7 (rebuilt): Web frontend for the Sri Lanka Tourism Multimodal RAG
+system.
 
-Lets you:
-  - Type a natural language question (structured, semantic, or hybrid)
-  - Optionally upload an image to search for visually similar destinations
-  - See the generated answer, which retrieval route was used, and the
-    underlying retrieved facts/text/images (useful for your demo, since it
-    shows the examiner exactly how retrieval worked, not just the final text)
+This is now a thin client: it does NOT import retrieval/generation code
+directly. Every question goes over HTTP to the FastAPI backend
+(backend/main.py). That split is what lets frontend and backend run on
+different machines/ports and (next phase) be containerized separately.
 
-Run from the project root:
-    streamlit run app/app.py
+Requires the backend to be running first:
+    uv run uvicorn backend.main:app --reload --port 8000
+
+Then, in a second terminal, run this:
+    uv run streamlit run frontend/streamlit_app.py
 """
 
-import sys
-import tempfile
+import os
 from pathlib import Path
 
+import requests
 import streamlit as st
 from PIL import Image
 
-# Make scripts/ importable from here
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
-
-from generate_response import answer_query  # noqa: E402
+# Same machine by default (both processes run locally for now). Overridable
+# via an environment variable so this also works once backend/frontend move
+# into separate Docker containers in the next phase.
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
 
 st.set_page_config(page_title="Sri Lanka Tourism RAG", page_icon="🏝️", layout="wide")
 
@@ -50,10 +51,22 @@ generating an answer:
 - 🖼️ **Image vector database (ChromaDB + CLIP)** — visual similarity search
 
 A rule-based **router** decides which source(s) each query needs, then
-a locally-running **LLM (Ollama)** generates the final answer using only
-the retrieved context.
+an **LLM** (Gemini API or a local Ollama model, set in `.env`) generates
+the final answer using only the retrieved context.
         """
     )
+
+    # Surface backend health + which LLM provider is active, so it's obvious
+    # in the demo which mode the app is running in.
+    try:
+        health = requests.get(f"{BACKEND_URL}/api/health", timeout=3).json()
+        st.success(f"Backend connected — LLM provider: **{health['llm_provider']}**")
+    except requests.exceptions.RequestException:
+        st.error(
+            f"Can't reach the backend at {BACKEND_URL}. "
+            "Start it with: `uv run uvicorn backend.main:app --reload --port 8000`"
+        )
+
     st.divider()
     st.subheader("Try these example queries")
     example_queries = [
@@ -91,24 +104,29 @@ if submitted:
     if not query and uploaded_image is None:
         st.warning("Please enter a question or upload an image.")
     else:
+        effective_query = query or "Find destinations that look like this image."
+
         with st.spinner("Retrieving context and generating answer..."):
-            image_path = None
+            data = {"query": effective_query}
+            files = None
             if uploaded_image is not None:
-                # Save the uploaded image to a temp file so query_image_by_image
-                # (which expects a filesystem path) can read it
-                suffix = Path(uploaded_image.name).suffix
-                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-                tmp.write(uploaded_image.getvalue())
-                tmp.close()
-                image_path = tmp.name
+                files = {
+                    "image": (
+                        uploaded_image.name,
+                        uploaded_image.getvalue(),
+                        uploaded_image.type,
+                    )
+                }
 
-            effective_query = query or "Find destinations that look like this image."
-
+            result = None
             try:
-                result = answer_query(effective_query, uploaded_image_path=image_path)
-            except Exception as e:
-                st.error(f"Something went wrong: {e}")
-                result = None
+                resp = requests.post(
+                    f"{BACKEND_URL}/api/query", data=data, files=files, timeout=120
+                )
+                resp.raise_for_status()
+                result = resp.json()
+            except requests.exceptions.RequestException as e:
+                st.error(f"Couldn't reach the backend: {e}")
 
         if result:
             st.subheader("Answer")
@@ -142,7 +160,12 @@ if submitted:
                     for r in result["image_results"]:
                         st.markdown(f"- **{r['name']}** (distance={r['distance']:.4f})")
 
-            # Show retrieved images, if any, as actual thumbnails
+            # Show retrieved images, if any, as actual thumbnails.
+            # Note: this reads image files directly off disk, which only
+            # works because frontend and backend run on the same machine
+            # for now. Once they're split into separate Docker containers
+            # (next phase), the backend will need to serve these as a
+            # static/file endpoint instead of returning raw filesystem paths.
             if result["image_paths_to_display"]:
                 st.subheader("Related images")
                 cols = st.columns(min(len(result["image_paths_to_display"]), 4))

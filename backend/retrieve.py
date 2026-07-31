@@ -21,7 +21,7 @@ import chromadb
 from sentence_transformers import SentenceTransformer
 from PIL import Image
 
-from router import classify_query, describe_route, RouteDecision
+from backend.router import classify_query, describe_route, RouteDecision
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = PROJECT_ROOT / "db" / "tourism.db"
@@ -186,12 +186,13 @@ def retrieve(query_text: str, uploaded_image_path: str | None = None,
         else:
             # Hybrid text queries can still pull relevant images via CLIP's
             # shared text-image embedding space, even with no uploaded photo.
-            ctx.image_results = query_image_by_text(query_text, top_k=top_k)
+            ctx.image_results = query_image_by_text(query_text, top_k=image_top_k)
 
     return ctx
 
 
 if __name__ == "__main__":
+    # Run from the project root as:  python -m backend.retrieve
     test_queries = [
         "What is the entrance fee for Sigiriya?",
         "Suggest a peaceful place for meditation",
