@@ -123,14 +123,15 @@ def query_text_semantic(query_text: str, top_k: int = 3) -> list[dict]:
 # Image retrieval (by uploaded image OR by text, since CLIP shares one space)
 # ---------------------------------------------------------------------------
 
-def query_image_by_image(image_path: str, top_k: int = 3) -> list[dict]:
+def query_image_by_image(image_path: str, top_k: int = 3, category_filter: str | None = None) -> list[dict]:
     model = _get_clip_model()
     client = _get_chroma_client()
     collection = client.get_collection(IMAGE_COLLECTION_NAME)
 
     img = Image.open(image_path).convert("RGB")
     embedding = model.encode(img).tolist()
-    results = collection.query(query_embeddings=[embedding], n_results=top_k)
+    where = {"category": category_filter} if category_filter else None
+    results = collection.query(query_embeddings=[embedding], n_results=top_k, where=where)
 
     return [
         {**meta, "distance": dist}
@@ -138,18 +139,54 @@ def query_image_by_image(image_path: str, top_k: int = 3) -> list[dict]:
     ]
 
 
-def query_image_by_text(query_text: str, top_k: int = 3) -> list[dict]:
+def query_image_by_text(query_text: str, top_k: int = 3, category_filter: str | None = None) -> list[dict]:
     model = _get_clip_model()
     client = _get_chroma_client()
     collection = client.get_collection(IMAGE_COLLECTION_NAME)
 
     embedding = model.encode(query_text).tolist()
-    results = collection.query(query_embeddings=[embedding], n_results=top_k)
+    where = {"category": category_filter} if category_filter else None
+    results = collection.query(query_embeddings=[embedding], n_results=top_k, where=where)
 
     return [
         {**meta, "distance": dist}
         for meta, dist in zip(results["metadatas"][0], results["distances"][0])
     ]
+
+
+def query_images_for_destinations(names: list[str], top_k: int = 3) -> list[dict]:
+    """
+    Fetches images for a specific, already-known list of destination names —
+    used to keep images consistent with whatever the SQL/semantic retrieval
+    already found, instead of running a separate, independently-ranked CLIP
+    search that can disagree with the text answer.
+
+    Not a similarity search (no query embedding involved), so there's no
+    meaningful "distance" — we return distance=None and note how each image
+    was matched instead.
+    """
+    if not names:
+        return []
+
+    client = _get_chroma_client()
+    collection = client.get_collection(IMAGE_COLLECTION_NAME)
+    got = collection.get(where={"name": {"$in": names}})
+
+    metadatas = got.get("metadatas", []) or []
+
+    # Preserve the same order as `names` (i.e. the ranking the text/SQL
+    # retrieval already produced), and cap at one image per destination so
+    # a destination with multiple photos doesn't crowd out the others.
+    by_name: dict[str, dict] = {}
+    for meta in metadatas:
+        by_name.setdefault(meta["name"], meta)
+
+    ordered = []
+    for name in names:
+        if name in by_name and len(ordered) < top_k:
+            ordered.append({**by_name[name], "distance": None, "matched_via": "text/SQL retrieval"})
+
+    return ordered
 
 
 # ---------------------------------------------------------------------------
@@ -182,11 +219,32 @@ def retrieve(query_text: str, uploaded_image_path: str | None = None,
 
     if decision.use_image:
         if uploaded_image_path:
-            ctx.image_results = query_image_by_image(uploaded_image_path, top_k=image_top_k)
+            # Explicit image upload -> always a real CLIP similarity search,
+            # optionally narrowed by category if the query also mentioned one.
+            ctx.image_results = query_image_by_image(
+                uploaded_image_path, top_k=image_top_k, category_filter=decision.category_filter
+            )
         else:
-            # Hybrid text queries can still pull relevant images via CLIP's
-            # shared text-image embedding space, even with no uploaded photo.
-            ctx.image_results = query_image_by_text(query_text, top_k=image_top_k)
+            # Prefer anchoring images to whatever destinations the SQL/text
+            # retrieval already found — this guarantees the photos shown
+            # actually match what the generated answer talks about, rather
+            # than coming from an independent CLIP ranking that can disagree
+            # (e.g. a beach-focused answer showing a mosque, because CLIP's
+            # text encoder ranked the raw query differently than MiniLM did).
+            anchor_names = []
+            for r in ctx.sql_results + ctx.text_results:
+                if r["name"] not in anchor_names:
+                    anchor_names.append(r["name"])
+
+            if anchor_names:
+                ctx.image_results = query_images_for_destinations(anchor_names, top_k=image_top_k)
+            else:
+                # No specific destinations identified (e.g. a purely visual,
+                # category-less request) -> fall back to a free CLIP
+                # text-to-image search, still respecting any category filter.
+                ctx.image_results = query_image_by_text(
+                    query_text, top_k=image_top_k, category_filter=decision.category_filter
+                )
 
     return ctx
 

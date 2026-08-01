@@ -157,7 +157,10 @@ if submitted:
                 if result["image_results"]:
                     st.markdown("**Image matches:**")
                     for r in result["image_results"]:
-                        st.markdown(f"- **{r['name']}** (distance={r['distance']:.4f})")
+                        if r.get("distance") is not None:
+                            st.markdown(f"- **{r['name']}** (distance={r['distance']:.4f})")
+                        else:
+                            st.markdown(f"- **{r['name']}** (matched via {r.get('matched_via', 'retrieval')})")
 
             # Show retrieved images, if any, as actual thumbnails, in the
             # order the backend already sorted them (most visually relevant

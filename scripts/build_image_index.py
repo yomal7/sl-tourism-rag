@@ -43,6 +43,10 @@ CLIP_MODEL_NAME = "clip-ViT-B-32"
 CATEGORY_TO_FOLDER = {
     "beach": "beaches",
     "historical_site": "historical_sites",
+    "mountain": "mountains",
+    "national_park": "national_parks",
+    "waterfall": "waterfalls",
+    "temple": "temples",
 }
 
 
