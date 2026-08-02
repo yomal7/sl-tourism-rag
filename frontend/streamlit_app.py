@@ -1,21 +1,3 @@
-"""
-streamlit_app.py
------------------
-Phase 7 (rebuilt): Web frontend for the Sri Lanka Tourism Multimodal RAG
-system.
-
-This is now a thin client: it does NOT import retrieval/generation code
-directly. Every question goes over HTTP to the FastAPI backend
-(backend/main.py). That split is what lets frontend and backend run on
-different machines/ports and (next phase) be containerized separately.
-
-Requires the backend to be running first:
-    uv run uvicorn backend.main:app --reload --port 8000
-
-Then, in a second terminal, run this:
-    uv run streamlit run frontend/streamlit_app.py
-"""
-
 import os
 
 import requests
@@ -55,8 +37,6 @@ the final answer using only the retrieved context.
         """
     )
 
-    # Surface backend health + which LLM provider is active, so it's obvious
-    # in the demo which mode the app is running in.
     try:
         health = requests.get(f"{BACKEND_URL}/api/health", timeout=3).json()
         st.success(f"Backend connected — LLM provider: **{health['llm_provider']}**")
@@ -79,13 +59,14 @@ the final answer using only the retrieved context.
         if st.button(eq, use_container_width=True):
             st.session_state["query_input"] = eq
 
-# ---- Query input ----
+# Query input
 query = st.text_input(
     "Ask a question about Sri Lankan tourist destinations:",
     key="query_input",
     placeholder="e.g. Suggest a peaceful place for meditation",
 )
 
+# Image upload
 uploaded_image = st.file_uploader(
     "Optional: upload a photo to find visually similar destinations",
     type=["jpg", "jpeg", "png"],
@@ -98,7 +79,6 @@ with col1:
 if uploaded_image is not None:
     st.image(uploaded_image, caption="Uploaded image", width=250)
 
-# ---- Handle submission ----
 if submitted:
     if not query and uploaded_image is None:
         st.warning("Please enter a question or upload an image.")
@@ -162,15 +142,6 @@ if submitted:
                         else:
                             st.markdown(f"- **{r['name']}** (matched via {r.get('matched_via', 'retrieval')})")
 
-            # Show retrieved images, if any, as actual thumbnails, in the
-            # order the backend already sorted them (most visually relevant
-            # first), captioned with the actual destination name rather than
-            # the raw filename.
-            # Note: this reads image files directly off disk, which only
-            # works because frontend and backend run on the same machine
-            # for now. Once they're split into separate Docker containers
-            # (next phase), the backend will need to serve these as a
-            # static/file endpoint instead of returning raw filesystem paths.
             if result["image_paths_to_display"]:
                 st.subheader("Related images")
                 images_to_show = result["image_paths_to_display"]
@@ -181,4 +152,4 @@ if submitted:
                         with cols[i % len(cols)]:
                             st.image(img, caption=item["name"], use_container_width=True)
                     except Exception:
-                        pass  # skip images that fail to load rather than breaking the page
+                        pass

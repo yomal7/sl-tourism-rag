@@ -1,15 +1,3 @@
-"""
-config.py
----------
-Central place that reads .env and exposes typed settings to the rest of
-the backend. Nothing else in backend/ should call os.environ directly —
-import `settings` from here instead.
-
-Why pydantic-settings: it validates types (e.g. catches a typo'd env var
-early), gives IDE autocomplete, and is what FastAPI projects use by
-convention — worth a line in the report.
-"""
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 

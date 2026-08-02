@@ -1,19 +1,3 @@
-"""
-router.py
----------
-Decides WHICH data source(s) a user query needs:
-  - SQL (structured facts: fees, hours, difficulty, location)
-  - Text semantic search (descriptive/mood-based queries)
-  - Image search (query includes an uploaded image)
-  - Hybrid (a mix of the above — most natural-language questions end up here)
-
-Approach: simple, explainable rule-based classification using keyword
-matching and entity extraction. This is deliberately NOT a black box —
-you can point to exactly why a query was routed a certain way, which is
-easy to describe and defend in your report. (An LLM-based classifier is
-a possible extension — see the note at the bottom of this file.)
-"""
-
 import re
 import sqlite3
 from pathlib import Path
@@ -22,7 +6,7 @@ from dataclasses import dataclass, field
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = PROJECT_ROOT / "db" / "tourism.db"
 
-# Keywords that suggest the user wants a specific FACT (structured/SQL)
+# Keywords that suggest the user wants a specific FACT 
 STRUCTURED_KEYWORDS = [
     "fee", "cost", "price", "how much", "entrance", "ticket",
     "hours", "open", "close", "timing", "when does",
@@ -40,16 +24,14 @@ SEMANTIC_KEYWORDS = [
     "hidden gem", "off the beaten path", "spiritual", "scenic",
 ]
 
-# Keywords that suggest the user wants to SEE something (image search),
-# even without uploading a photo. CLIP lets us search the image collection
-# using text directly, so these don't require an uploaded image.
+# Keywords that suggest the user wants images,
 IMAGE_KEYWORDS = [
     "show me", "what does it look like", "what do they look like",
     "picture", "photo", "photos", "image", "images", "look like",
     "visual", "scenery", "view of", "what it looks like",
 ]
 
-# Regex to catch "under 1000", "less than 500 rupees", etc.
+
 FEE_PATTERN = re.compile(r"(under|less than|below|cheaper than)\s+(\d+)", re.IGNORECASE)
 
 
@@ -65,7 +47,6 @@ class RouteDecision:
 
 
 def _load_destination_names():
-    """Used for simple entity matching: does the query mention a place by name?"""
     conn = sqlite3.connect(DB_PATH)
     names = [row[0] for row in conn.execute("SELECT name FROM destinations;")]
     conn.close()
@@ -73,23 +54,13 @@ def _load_destination_names():
 
 
 def classify_query(query_text: str, image_provided: bool = False) -> RouteDecision:
-    """
-    Main entry point. Returns a RouteDecision describing which retrieval
-    functions (from retrieve.py) should be called for this query.
-    """
     decision = RouteDecision()
     text_lower = query_text.lower()
 
-    # --- Image provided => image retrieval is needed ---
     if image_provided:
         decision.use_image = True
         decision.reasoning.append("An image was provided, so image similarity search is used.")
 
-    # --- Entity matching: does the query name a specific destination? ---
-    # Checks both the full name ("Temple of the Sacred Tooth Relic") and its
-    # significant individual words ("Sigiriya" alone should still match
-    # "Sigiriya Rock Fortress"). Short/common words are skipped to avoid
-    # false positives (e.g. matching "Beach" or "Temple" as if it were a name).
     STOPWORDS = {"the", "of", "and", "at", "in", "temple", "beach", "fort",
                  "ancient", "city", "rock", "cave", "sacred"}
     all_names = _load_destination_names()
@@ -112,13 +83,11 @@ def classify_query(query_text: str, image_provided: bool = False) -> RouteDecisi
             "-> structured lookup."
         )
 
-    # --- Category filter (helps narrow SQL and can help semantic too) ---
     if "beach" in text_lower:
         decision.category_filter = "beach"
     elif "temple" in text_lower or "historical" in text_lower or "heritage" in text_lower:
         decision.category_filter = "historical_site"
 
-    # --- Fee constraint extraction ---
     fee_match = FEE_PATTERN.search(text_lower)
     if fee_match:
         decision.max_fee_lkr = int(fee_match.group(2))
@@ -129,7 +98,7 @@ def classify_query(query_text: str, image_provided: bool = False) -> RouteDecisi
         decision.use_sql = True
         decision.reasoning.append("Detected 'free' -> filtering entrance_fee_lkr = 0.")
 
-    # --- Keyword-based classification ---
+    # Keyword-based classification
     structured_hit = any(kw in text_lower for kw in STRUCTURED_KEYWORDS)
     semantic_hit = any(kw in text_lower for kw in SEMANTIC_KEYWORDS)
     image_hit = any(kw in text_lower for kw in IMAGE_KEYWORDS)
@@ -150,10 +119,7 @@ def classify_query(query_text: str, image_provided: bool = False) -> RouteDecisi
             "Query asks to see/visualize something -> image search via CLIP text-to-image."
         )
 
-    # --- Fallback: if nothing matched, default to full hybrid (SQL + semantic + image) ---
-    # Most open-ended natural language questions benefit from structured
-    # facts, descriptive context, AND a representative photo, so this is a
-    # safe default rather than returning nothing.
+    # Fallback: default to full hybrid (SQL + semantic + image)
     if not (decision.use_sql or decision.use_text_semantic or decision.use_image):
         decision.use_sql = True
         decision.use_text_semantic = True
@@ -177,16 +143,6 @@ def describe_route(decision: RouteDecision) -> str:
     label = " + ".join(parts) if parts else "None"
     return f"[Route: {label}]  Reasoning: {'; '.join(decision.reasoning)}"
 
-
-# ---------------------------------------------------------------------------
-# NOTE / possible extension for your report:
-# Instead of keyword rules, you could ask the LLM itself to classify the
-# query type by prompting it to output one of {structured, semantic, image,
-# hybrid} before generation. That's more flexible but less transparent and
-# costs an extra API call per query. Keyword rules are simpler to explain,
-# debug, and evaluate for a project like this — worth mentioning both
-# approaches and your tradeoff reasoning in the report.
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     test_queries = [
