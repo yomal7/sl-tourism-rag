@@ -79,9 +79,9 @@ agree on as a team or hardcode.
 ### 5. Build the databases
 Run these **in order** — each one depends on the previous step:
 ```bash
-uv run python scripts/setup_db.py
-uv run python scripts/build_text_index.py
-uv run python scripts/build_image_index.py
+uv run python -m scripts.setup_db
+uv run python -m scripts.build_text_index
+uv run python -m scripts.build_image_index
 ```
 The first run of steps 2 and 3 downloads the embedding models (~90MB for
 MiniLM, ~350MB for CLIP) — needs internet access, only happens once, then
