@@ -117,6 +117,12 @@ def classify_query(query_text: str, image_provided: bool = False) -> RouteDecisi
             "Query asks to see/visualize something -> image search via CLIP text-to-image."
         )
 
+    # Add semantic search for descriptive questions.
+    descriptive_triggers = ["how high", "how tall", "describe", "tell me about"]
+    if decision.use_sql and not decision.use_text_semantic and any(trigger in text_lower for trigger in descriptive_triggers):
+        decision.use_text_semantic = True
+        decision.reasoning.append("Query asks for descriptive details -> add Text-Semantic search.")
+
     # Fallback: default to full hybrid (SQL + semantic + image)
     if not (decision.use_sql or decision.use_text_semantic or decision.use_image):
         decision.use_sql = True

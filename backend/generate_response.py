@@ -30,6 +30,7 @@ def format_sql_results(rows: list[dict]) -> str:
             f"accessibility: {r['accessibility']}, "
             f"opening hours: {r['opening_hours']}, "
             f"best time to visit: {r['best_time_to_visit']}, "
+            f"description: {r.get('description') or 'n/a'}, "
             f"notable: {r['significance_or_activities']}."
         )
     return "\n".join(lines)
