@@ -1,11 +1,12 @@
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, Form, File, UploadFile
+from fastapi import FastAPI, Form, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
 from backend.generate_response import answer_query
+from backend.llm_client import LLMServiceError
 
 app = FastAPI(
     title="Sri Lanka Tourism RAG API",
@@ -41,6 +42,8 @@ async def query(
 
     try:
         result = answer_query(query, uploaded_image_path=image_path)
+    except LLMServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.user_message)
     finally:
         if image_path:
             Path(image_path).unlink(missing_ok=True)

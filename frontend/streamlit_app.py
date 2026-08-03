@@ -1,72 +1,143 @@
 import os
+from pathlib import Path
 
 import requests
 import streamlit as st
 from PIL import Image
 
-# Same machine by default (both processes run locally for now). Overridable
-# via an environment variable so this also works once backend/frontend move
-# into separate Docker containers in the next phase.
+APP_NAME = "Serendib"
+APP_SUBTITLE = "Multimodal RAG Assistant"
+APP_TAGLINE = "Your guide to Sri Lanka's beaches, temples and hidden spots."
+
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
 
-st.set_page_config(page_title="Sri Lanka Tourism RAG", page_icon="🏝️", layout="wide")
+EXAMPLE_QUERIES = [
+    {"label": "Sigiriya fees & hours", "query": "What is the entrance fee for Sigiriya and when is it open?"},
+    {"label": "A peaceful spot", "query": "Suggest a peaceful place for meditation"},
+    {"label": "Free beaches", "query": "Which beaches are free to enter?"},
+    {"label": "Lively surf beach", "query": "Tell me about a good beach for surfing with a lively atmosphere"},
+    {"label": "Anuradhapura", "query": "What ancient ruins can I visit near Anuradhapura?"},
+]
 
-st.title("🏝️ Sri Lanka Tourism — Multimodal RAG Assistant")
-st.caption(
-    "Ask about beaches, temples, and historical sites in Sri Lanka. "
-    "Answers are generated from a relational database + vector database, "
-    "not from the LLM's general knowledge."
+st.set_page_config(page_title=f"{APP_NAME} — {APP_SUBTITLE}", page_icon="🧭", layout="wide")
+
+st.markdown(
+    """
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Inter:wght@400;500;600&display=swap');
+
+    html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
+
+    /* Pull the whole page up a bit — default top padding reads as dead space */
+    .block-container { padding-top: 2.5rem; max-width: 1100px; }
+
+    /* Bump base body copy site-wide. Targeting real HTML tags (p, li, label,
+       input, textarea) rather than Streamlit's internal CSS class names,
+       since those class names churn between Streamlit versions and tag
+       selectors don't. */
+    p, li, label, .stMarkdown { font-size: 1.05rem !important; line-height: 1.65; }
+    small { font-size: 0.95rem !important; }
+
+    input, textarea { font-size: 1.05rem !important; }
+    div.stButton > button { font-size: 0.95rem !important; padding: 0.55rem 1.1rem !important; }
+    div.stButton > button p { font-size: 0.95rem !important; }
+
+    h1, h2, h3 { font-family: 'Fraunces', serif !important; color: #0B4F4A; }
+    h2 { font-size: 1.9rem !important; }
+    h3 { font-size: 1.35rem !important; }
+
+    .app-title {
+        font-family: 'Fraunces', serif;
+        font-size: 2.8rem;
+        font-weight: 700;
+        color: #0B4F4A;
+        letter-spacing: -0.5px;
+        line-height: 1.15;
+    }
+    .app-subtitle {
+        font-family: 'Inter', sans-serif;
+        font-size: 1.3rem;
+        font-weight: 500;
+        color: #4F7873;
+    }
+    .app-tagline {
+        color: #55605E;
+        font-size: 1.1rem !important;
+        margin: 0.4rem 0 0.6rem 0;
+    }
+    .status-pill {
+        display: inline-block;
+        padding: 0.35rem 0.9rem;
+        border-radius: 999px;
+        font-size: 0.85rem !important;
+        font-weight: 600;
+        float: right;
+        margin-top: 0.9rem;
+    }
+    .status-ok   { background: #E4F3EE; color: #0B4F4A; }
+    .status-bad  { background: #FBEAEA; color: #9B2C2C; }
+
+    div.stButton > button {
+        border-radius: 8px;
+        border: 1px solid #D8DDDB;
+    }
+    div.stButton > button[kind="primary"] {
+        background-color: #0B4F4A;
+        border: none;
+    }
+    div.stButton > button[kind="primary"]:hover {
+        background-color: #0E6259;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
-with st.sidebar:
-    st.header("About this system")
+header_left, header_right = st.columns([5, 1])
+
+with header_left:
     st.markdown(
-        """
-This assistant retrieves information from **three sources** before
-generating an answer:
-
-- 🗄️ **Relational database (SQLite)** — facts like entrance fees, hours,
-  accessibility
-- 📖 **Text vector database (ChromaDB)** — semantic search over
-  descriptions
-- 🖼️ **Image vector database (ChromaDB + CLIP)** — visual similarity search
-
-A rule-based **router** decides which source(s) each query needs, then
-an **LLM** (Gemini API or a local Ollama model, set in `.env`) generates
-the final answer using only the retrieved context.
-        """
+        f'<div class="app-title">{APP_NAME} <span class="app-subtitle">— {APP_SUBTITLE}</span></div>',
+        unsafe_allow_html=True,
     )
+    st.markdown(f'<div class="app-tagline">{APP_TAGLINE}</div>', unsafe_allow_html=True)
 
+with header_right:
     try:
         health = requests.get(f"{BACKEND_URL}/api/health", timeout=3).json()
-        st.success(f"Backend connected — LLM provider: **{health['llm_provider']}**")
-    except requests.exceptions.RequestException:
-        st.error(
-            f"Can't reach the backend at {BACKEND_URL}. "
-            "Start it with: `uv run uvicorn backend.main:app --reload --port 8000`"
+        st.markdown(
+            f'<div class="status-pill status-ok">● {health["llm_provider"]}</div>',
+            unsafe_allow_html=True,
         )
+        backend_ok = True
+    except requests.exceptions.RequestException:
+        st.markdown('<div class="status-pill status-bad">● backend offline</div>', unsafe_allow_html=True)
+        backend_ok = False
 
-    st.divider()
-    st.subheader("Try these example queries")
-    example_queries = [
-        "What is the entrance fee for Sigiriya and when is it open?",
-        "Suggest a peaceful place for meditation",
-        "Which beaches are free to enter?",
-        "Tell me about a good beach for surfing with a lively atmosphere",
-        "What ancient ruins can I visit near Anuradhapura?",
-    ]
-    for eq in example_queries:
-        if st.button(eq, use_container_width=True):
-            st.session_state["query_input"] = eq
+st.caption("Answers are pulled from a real destinations database, not just what the model already knows.")
 
-# Query input
+if not backend_ok:
+    st.error(
+        f"Can't reach the backend at {BACKEND_URL}. "
+        "Start it with: `uv run uvicorn backend.main:app --reload --port 8000`"
+    )
+
+st.write("")
+
+st.caption("Try one of these, or type your own question below:")
+chip_cols = st.columns(len(EXAMPLE_QUERIES))
+for col, example in zip(chip_cols, EXAMPLE_QUERIES):
+    with col:
+        if st.button(example["label"], width="stretch", key=f"chip_{example['label']}"):
+            st.session_state["query_input"] = example["query"]
+
+# Query input and optional image upload
 query = st.text_input(
     "Ask a question about Sri Lankan tourist destinations:",
     key="query_input",
     placeholder="e.g. Suggest a peaceful place for meditation",
 )
 
-# Image upload
 uploaded_image = st.file_uploader(
     "Optional: upload a photo to find visually similar destinations",
     type=["jpg", "jpeg", "png"],
@@ -74,7 +145,7 @@ uploaded_image = st.file_uploader(
 
 col1, col2 = st.columns([1, 5])
 with col1:
-    submitted = st.button("Ask", type="primary")
+    submitted = st.button("Ask", type="primary", width="stretch")
 
 if uploaded_image is not None:
     st.image(uploaded_image, caption="Uploaded image", width=250)
@@ -102,8 +173,17 @@ if submitted:
                 resp = requests.post(
                     f"{BACKEND_URL}/api/query", data=data, files=files, timeout=120
                 )
-                resp.raise_for_status()
-                result = resp.json()
+                if resp.status_code == 200:
+                    result = resp.json()
+                else:
+                    try:
+                        detail = resp.json().get("detail", "Something went wrong generating the answer.")
+                    except ValueError:
+                        detail = "Something went wrong generating the answer."
+                    if resp.status_code == 429:
+                        st.warning(f"⏳ {detail}")
+                    else:
+                        st.error(f"⚠️ {detail}")
             except requests.exceptions.RequestException as e:
                 st.error(f"Couldn't reach the backend: {e}")
 
@@ -150,6 +230,6 @@ if submitted:
                     try:
                         img = Image.open(item["filepath"])
                         with cols[i % len(cols)]:
-                            st.image(img, caption=item["name"], use_container_width=True)
+                            st.image(img, caption=item["name"], width="stretch")
                     except Exception:
                         pass
