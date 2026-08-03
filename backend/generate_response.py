@@ -59,7 +59,7 @@ def build_context_block(ctx: RetrievalContext) -> str:
         format_text_results(ctx.text_results),
         format_image_results(ctx.image_results),
     ]
-    sections = [s for s in sections if s]  # drop empty sections
+    sections = [s for s in sections if s]  # Skip sections that had no matches.
     if not sections:
         return "No relevant information was found in the knowledge base for this query."
     return "\n\n".join(sections)
@@ -88,6 +88,7 @@ def answer_query(query_text: str, uploaded_image_path: str | None = None) -> dic
         path = r.get("filepath")
         if path and path not in seen_paths:
             seen_paths.add(path)
+            # Keep one thumbnail per filepath for the frontend.
             image_paths.append({"filepath": path, "name": r.get("name", "")})
 
     return {

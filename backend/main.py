@@ -9,8 +9,6 @@ from backend.generate_response import answer_query
 
 app = FastAPI(
     title="Sri Lanka Tourism RAG API",
-    description="Structured (SQL) + semantic (text) + image retrieval, "
-    "combined and passed to an LLM for a grounded answer.",
     version="1.0.0",
 )
 
@@ -22,12 +20,12 @@ app.add_middleware(
 )
 
 
+# Endpoint for health check.
 @app.get("/api/health")
 def health():
-    """Quick check that the API is up and which LLM provider it's using."""
     return {"status": "ok", "llm_provider": settings.llm_provider}
 
-
+# Endpoint for answering queries with optional image upload.
 @app.post("/api/query")
 async def query(
     query: str = Form(...),

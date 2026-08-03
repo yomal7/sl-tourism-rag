@@ -1,21 +1,19 @@
 import sqlite3
-from pathlib import Path
 from dataclasses import dataclass, field
 
 import chromadb
-from sentence_transformers import SentenceTransformer
 from PIL import Image
+from sentence_transformers import SentenceTransformer
 
+from backend.constants import (
+    CHROMA_PATH,
+    CLIP_MODEL,
+    DB_PATH,
+    IMAGE_COLLECTION_NAME,
+    TEXT_COLLECTION_NAME,
+    TEXT_EMBED_MODEL,
+)
 from backend.router import classify_query, describe_route, RouteDecision
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = PROJECT_ROOT / "db" / "tourism.db"
-CHROMA_PATH = PROJECT_ROOT / "vector_store" / "chroma"
-
-TEXT_COLLECTION_NAME = "destinations_text"
-IMAGE_COLLECTION_NAME = "destinations_image"
-TEXT_EMBED_MODEL = "all-MiniLM-L6-v2"
-CLIP_MODEL = "clip-ViT-B-32"
 
 _text_model = None
 _clip_model = None
@@ -141,6 +139,7 @@ def query_images_for_destinations(names: list[str], top_k: int = 3) -> list[dict
     ordered = []
     for name in names:
         if name in by_name and len(ordered) < top_k:
+            # Keep the text/SQL ranking instead of re-sorting by CLIP distance.
             ordered.append({**by_name[name], "distance": None, "matched_via": "text/SQL retrieval"})
 
     return ordered
@@ -167,6 +166,7 @@ def retrieve(query_text: str, uploaded_image_path: str | None = None,
 
     if decision.use_image:
         if uploaded_image_path:
+            # Uploaded image means real image-to-image retrieval.
             ctx.image_results = query_image_by_image(
                 uploaded_image_path, top_k=image_top_k, category_filter=decision.category_filter
             )

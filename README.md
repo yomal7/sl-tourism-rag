@@ -10,27 +10,28 @@ generate the final answer.
 ## Project structure
 ```
 sl-tourism-rag/
-├── backend/                     # FastAPI app: retrieval + LLM generation
-│   ├── main.py                  # API endpoints (/api/health, /api/query)
-│   ├── config.py                # reads .env into typed settings
-│   ├── llm_client.py            # Gemini / Ollama switch, per LLM_PROVIDER
-│   ├── router.py                # classifies query type (SQL/semantic/image)
-│   ├── retrieve.py              # retrieval functions per source
-│   └── generate_response.py     # context integration + LLM call
+├── backend/               
+│   ├── main.py                  
+│   ├── config.py 
+|   ├── constants.py                
+│   ├── llm_client.py            
+│   ├── router.py                
+│   ├── retrieve.py              
+│   └── generate_response.py     
 ├── frontend/
-│   └── streamlit_app.py         # calls the backend over HTTP
-├── scripts/                     # one-off build scripts (run once, or after data changes)
-│   ├── setup_db.py              # builds SQLite from destinations.csv
-│   ├── build_text_index.py      # embeds descriptions into ChromaDB
-│   └── build_image_index.py     # embeds images (CLIP) into ChromaDB
+│   └── streamlit_app.py     
+├── scripts/             
+│   ├── setup_db.py     
+│   ├── build_text_index.py 
+│   └── build_image_index.py 
 ├── data/
-│   ├── destinations.csv         # master spreadsheet (facts + descriptions)
-│   └── images/                  # source images, organized by category
-├── db/                          # SQLite database (generated, not in git)
-├── vector_store/                # ChromaDB storage (generated, not in git)
-├── notes/                       # evaluation logs, image source citations
-├── pyproject.toml               # dependencies (managed with uv)
-├── .env.example                 # copy to .env and fill in
+│   ├── destinations.csv         
+│   └── images/                  
+├── db/                          
+├── vector_store/                
+├── notes/                       
+├── pyproject.toml               
+├── .env.example                 
 └── .gitignore
 ```
 
@@ -68,7 +69,7 @@ Then edit `.env`:
 - **Have Ollama running locally?** Set `LLM_PROVIDER=ollama`, then:
   ```bash
   ollama pull llama3.1
-  ollama list   # confirms the server is running
+  ollama list
   ```
 
 Each teammate's `.env` can differ — the code reads `LLM_PROVIDER` at
@@ -78,22 +79,20 @@ agree on as a team or hardcode.
 ### 5. Build the databases
 Run these **in order** — each one depends on the previous step:
 ```bash
-uv run python scripts/setup_db.py           # builds SQLite from data/destinations.csv
-uv run python scripts/build_text_index.py    # builds the text vector index
-uv run python scripts/build_image_index.py   # builds the image vector index (CLIP)
+uv run python scripts/setup_db.py
+uv run python scripts/build_text_index.py
+uv run python scripts/build_image_index.py
 ```
 The first run of steps 2 and 3 downloads the embedding models (~90MB for
 MiniLM, ~350MB for CLIP) — needs internet access, only happens once, then
 they're cached locally. Each script prints sanity-check output (row
-counts, sample queries) — check that these look correct before moving on.
+counts, sample queries).
 
 ### 6. Run the app (two processes)
 In one terminal:
 ```bash
 uv run uvicorn backend.main:app --reload --port 8000
 ```
-Confirm it's up at http://localhost:8000/docs (FastAPI's interactive
-API docs — useful for testing `/api/query` directly without the UI).
 
 In a second terminal:
 ```bash
@@ -111,11 +110,3 @@ it successfully connected to the backend and which LLM provider is active.
 - **Added a dependency?** `uv add <package>` (updates `pyproject.toml`
   and `uv.lock` together — don't hand-edit `uv.lock`).
 
-## Notes
-- `db/` and `vector_store/` are gitignored since they're large, generated,
-  and machine-specific. Every teammate runs Step 5 locally after cloning.
-- `uv.lock` **is** committed — that's what makes `uv sync` reproducible
-  across your Kubuntu machine and your teammate's Windows machine.
-- Image sources and licenses are logged in `notes/image_sources.csv` for
-  acknowledgement in the report.
-- Containerization (Docker) is a separate, later phase — not covered here.

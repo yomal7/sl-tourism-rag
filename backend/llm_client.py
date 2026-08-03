@@ -15,7 +15,7 @@ def generate(system_prompt: str, user_prompt: str) -> str:
             "expected 'gemini' or 'ollama'."
         )
 
-
+# Gemini
 def _generate_gemini(system_prompt: str, user_prompt: str) -> str:
     from google import genai
     from google.genai import types
@@ -33,7 +33,7 @@ def _generate_gemini(system_prompt: str, user_prompt: str) -> str:
     )
     return response.text
 
-
+# Ollama
 def _generate_ollama(system_prompt: str, user_prompt: str) -> str:
     import ollama
 

@@ -1,15 +1,14 @@
 import sqlite3
-from pathlib import Path
 
 import chromadb
 from sentence_transformers import SentenceTransformer
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = PROJECT_ROOT / "db" / "tourism.db"
-CHROMA_PATH = PROJECT_ROOT / "vector_store" / "chroma"
-COLLECTION_NAME = "destinations_text"
-
-EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
+from backend.constants import (
+    CHROMA_PATH,
+    DB_PATH,
+    TEXT_COLLECTION_NAME as COLLECTION_NAME,
+    TEXT_EMBED_MODEL as EMBEDDING_MODEL_NAME,
+)
 
 def fetch_destinations():
     conn = sqlite3.connect(DB_PATH)

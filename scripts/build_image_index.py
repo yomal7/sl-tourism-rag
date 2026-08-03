@@ -1,26 +1,17 @@
 import sqlite3
 from pathlib import Path
-
 import chromadb
 from PIL import Image
 from sentence_transformers import SentenceTransformer
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = PROJECT_ROOT / "db" / "tourism.db"
-IMAGES_ROOT = PROJECT_ROOT / "data" / "images"
-CHROMA_PATH = PROJECT_ROOT / "vector_store" / "chroma"
-COLLECTION_NAME = "destinations_image"
-
-CLIP_MODEL_NAME = "clip-ViT-B-32"
-
-CATEGORY_TO_FOLDER = {
-    "beach": "beaches",
-    "historical_site": "historical_sites",
-    "mountain": "mountains",
-    "national_park": "national_parks",
-    "waterfall": "waterfalls",
-    "temple": "temples",
-}
+from backend.constants import (
+    CATEGORY_TO_FOLDER,
+    CHROMA_PATH,
+    CLIP_MODEL_NAME,
+    DB_PATH,
+    IMAGES_ROOT,
+    IMAGE_COLLECTION_NAME as COLLECTION_NAME,
+)
 
 
 def fetch_destinations():

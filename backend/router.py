@@ -1,10 +1,8 @@
 import re
 import sqlite3
-from pathlib import Path
 from dataclasses import dataclass, field
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = PROJECT_ROOT / "db" / "tourism.db"
+from backend.constants import DB_PATH
 
 # Keywords that suggest the user wants a specific FACT 
 STRUCTURED_KEYWORDS = [

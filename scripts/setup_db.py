@@ -1,10 +1,9 @@
 import sqlite3
 import pandas as pd
-from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+from backend.constants import DB_PATH, PROJECT_ROOT
+
 CSV_PATH = PROJECT_ROOT / "data" / "destinations.csv"
-DB_PATH = PROJECT_ROOT / "db" / "tourism.db"
 
 CREATE_TABLE_SQL = """
 CREATE TABLE destinations (
