@@ -1,18 +1,3 @@
-"""
-generate_response.py
----------------------
-Phase 6: Context Integration + LLM Generation.
-
-Takes a RetrievalContext (from retrieve.py) — which may contain SQL rows,
-semantic text matches, and/or image matches — formats it all into one
-clear text block, and asks an LLM to write a grounded, natural-language
-answer using ONLY that context.
-
-Which LLM actually gets called (Gemini API or a local Ollama model) is
-controlled by LLM_PROVIDER in .env — see backend/llm_client.py and
-backend/config.py. This file doesn't need to know or care which one is
-active.
-"""
 
 from backend.retrieve import retrieve, RetrievalContext
 from backend.router import describe_route
@@ -45,6 +30,7 @@ def format_sql_results(rows: list[dict]) -> str:
             f"accessibility: {r['accessibility']}, "
             f"opening hours: {r['opening_hours']}, "
             f"best time to visit: {r['best_time_to_visit']}, "
+            f"description: {r.get('description') or 'n/a'}, "
             f"notable: {r['significance_or_activities']}."
         )
     return "\n".join(lines)
@@ -74,17 +60,13 @@ def build_context_block(ctx: RetrievalContext) -> str:
         format_text_results(ctx.text_results),
         format_image_results(ctx.image_results),
     ]
-    sections = [s for s in sections if s]  # drop empty sections
+    sections = [s for s in sections if s]  # Skip sections that had no matches.
     if not sections:
         return "No relevant information was found in the knowledge base for this query."
     return "\n\n".join(sections)
 
 
 def generate_response(ctx: RetrievalContext) -> str:
-    """
-    Sends the retrieved context + user question to whichever LLM provider
-    is configured in .env, and returns the generated answer text.
-    """
     context_block = build_context_block(ctx)
 
     user_prompt = f"""Context:
@@ -98,26 +80,16 @@ Write a helpful, natural-language answer using only the context above."""
 
 
 def answer_query(query_text: str, uploaded_image_path: str | None = None) -> dict:
-    """
-    Full end-to-end pipeline for one query: retrieve -> integrate context
-    -> generate. Returns a dict with everything useful for display in the
-    Streamlit app (Phase 7): the answer text, which route was used, and
-    which images to show alongside it.
-    """
     ctx = retrieve(query_text, uploaded_image_path=uploaded_image_path)
     answer_text = generate_response(ctx)
 
-    # ctx.image_results is already sorted by distance (most similar first) —
-    # ChromaDB returns results in that order. The previous version deduped
-    # with a set(), which silently threw that ordering away. This keeps the
-    # order, dedupes by filepath, and carries the destination name along so
-    # the frontend can use it as a caption instead of the raw filename.
     seen_paths = set()
     image_paths = []
     for r in ctx.image_results:
         path = r.get("filepath")
         if path and path not in seen_paths:
             seen_paths.add(path)
+            # Keep one thumbnail per filepath for the frontend.
             image_paths.append({"filepath": path, "name": r.get("name", "")})
 
     return {
@@ -132,9 +104,6 @@ def answer_query(query_text: str, uploaded_image_path: str | None = None) -> dic
 
 
 if __name__ == "__main__":
-    # Run from the project root as:  python -m backend.generate_response
-    # (plain `python backend/generate_response.py` won't work now that
-    # this uses package-relative imports — see README.)
     demo_queries = [
         "What is the entrance fee for Sigiriya and when is it open?",
         "Suggest a peaceful place for meditation with some background on it",

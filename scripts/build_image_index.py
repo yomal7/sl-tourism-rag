@@ -1,53 +1,17 @@
-"""
-build_image_index.py
----------------------
-Builds the IMAGE vector database for image similarity search.
-
-What it does:
-1. Reads destinations from db/tourism.db (for id, name, category, and the
-   expected image_filenames for each destination)
-2. Locates each image file under data/images/<beaches|historical_sites>/
-3. Embeds each image using CLIP (via sentence-transformers' 'clip-ViT-B-32')
-4. Stores the embeddings + metadata in a persistent ChromaDB collection
-
-Why CLIP specifically: CLIP embeds images and text into the SAME vector
-space. That means, later, we can search images using a plain text query
-("misty green mountain") without needing a separate captioning step — the
-text embedding and image embeddings are directly comparable.
-
-Run from the project root (after setup_db.py has been run and images have
-been placed in data/images/):
-    python scripts/build_image_index.py
-
-Re-running this script is safe — it clears and rebuilds the collection
-each time.
-"""
-
 import sqlite3
 from pathlib import Path
-
 import chromadb
 from PIL import Image
 from sentence_transformers import SentenceTransformer
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = PROJECT_ROOT / "db" / "tourism.db"
-IMAGES_ROOT = PROJECT_ROOT / "data" / "images"
-CHROMA_PATH = PROJECT_ROOT / "vector_store" / "chroma"
-COLLECTION_NAME = "destinations_image"
-
-CLIP_MODEL_NAME = "clip-ViT-B-32"
-
-# Maps the `category` column to the image subfolder. Add more here if you
-# introduce new categories later (e.g. "national_park" -> "national_parks").
-CATEGORY_TO_FOLDER = {
-    "beach": "beaches",
-    "historical_site": "historical_sites",
-    "mountain": "mountains",
-    "national_park": "national_parks",
-    "waterfall": "waterfalls",
-    "temple": "temples",
-}
+from backend.constants import (
+    CATEGORY_TO_FOLDER,
+    CHROMA_PATH,
+    CLIP_MODEL_NAME,
+    DB_PATH,
+    IMAGES_ROOT,
+    IMAGE_COLLECTION_NAME as COLLECTION_NAME,
+)
 
 
 def fetch_destinations():
@@ -61,11 +25,6 @@ def fetch_destinations():
 
 
 def find_image_path(filename: str, category: str) -> Path | None:
-    """
-    Looks for `filename` first in the folder matching its category, then
-    falls back to searching all subfolders under data/images/ (in case a
-    file was mis-categorized or a category is missing from the map above).
-    """
     folder = CATEGORY_TO_FOLDER.get(category)
     if folder:
         candidate = IMAGES_ROOT / folder / filename
@@ -114,7 +73,6 @@ def build_image_index():
 
             embedding = model.encode(img).tolist()
 
-            # Unique ID per image: destination id + image index
             image_id = f"{row['id']}_{idx}"
             ids.append(image_id)
             embeddings.append(embedding)
@@ -155,9 +113,6 @@ def build_image_index():
     collection.add(ids=ids, embeddings=embeddings, metadatas=metadatas)
     print(f"Indexed {collection.count()} images into collection '{COLLECTION_NAME}'.")
 
-    # ---- Sanity check: text-to-image query ----
-    # Because CLIP shares one embedding space, we can query the image
-    # collection using plain text (no images needed for this test).
     print("\n--- Sample text-to-image query: 'golden sandy beach with palm trees' ---")
     text_embedding = model.encode("golden sandy beach with palm trees").tolist()
     results = collection.query(query_embeddings=[text_embedding], n_results=3)

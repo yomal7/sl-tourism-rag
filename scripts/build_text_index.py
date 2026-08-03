@@ -1,37 +1,14 @@
-"""
-build_text_index.py
---------------------
-Builds the TEXT vector database for semantic retrieval.
-
-What it does:
-1. Reads destinations from db/tourism.db (the SQLite database from Phase 2)
-2. For each destination, builds a rich text passage (name + category +
-   location + description + activities) — richer input = better embeddings
-3. Embeds each passage using a Sentence Transformer model
-4. Stores the embeddings + metadata in a persistent ChromaDB collection
-
-Run from the project root (after setup_db.py has been run):
-    python scripts/build_text_index.py
-
-Re-running this script is safe — it clears and rebuilds the collection
-each time, so it always reflects the latest database contents.
-"""
-
 import sqlite3
-from pathlib import Path
 
 import chromadb
 from sentence_transformers import SentenceTransformer
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = PROJECT_ROOT / "db" / "tourism.db"
-CHROMA_PATH = PROJECT_ROOT / "vector_store" / "chroma"
-COLLECTION_NAME = "destinations_text"
-
-# A small, fast, well-regarded general-purpose embedding model.
-# 384-dimensional vectors, runs fine on CPU, no GPU needed.
-EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
-
+from backend.constants import (
+    CHROMA_PATH,
+    DB_PATH,
+    TEXT_COLLECTION_NAME as COLLECTION_NAME,
+    TEXT_EMBED_MODEL as EMBEDDING_MODEL_NAME,
+)
 
 def fetch_destinations():
     conn = sqlite3.connect(DB_PATH)
@@ -44,11 +21,6 @@ def fetch_destinations():
 
 
 def build_passage(row: dict) -> str:
-    """
-    Combine several fields into one text passage to embed.
-    Including name/category/location helps the model match queries that
-    mention a place type or region, not just descriptive wording.
-    """
     parts = [
         row.get("name", ""),
         f"Category: {row.get('category', '')}",
@@ -94,7 +66,6 @@ def build_text_index():
     CHROMA_PATH.parent.mkdir(parents=True, exist_ok=True)
     client = chromadb.PersistentClient(path=str(CHROMA_PATH))
 
-    # Fresh start each run so re-running always reflects the latest DB
     existing = [c.name for c in client.list_collections()]
     if COLLECTION_NAME in existing:
         client.delete_collection(COLLECTION_NAME)
@@ -113,7 +84,6 @@ def build_text_index():
 
     print(f"Indexed {collection.count()} passages into collection '{COLLECTION_NAME}'.")
 
-    # ---- Sanity check: run a couple of sample semantic queries ----
     print("\n--- Sample semantic query: 'peaceful place for meditation and reflection' ---")
     results = collection.query(
         query_texts=["peaceful place for meditation and reflection"], n_results=3
